@@ -1,0 +1,121 @@
+Attribute VB_Name = "FINAN_FI_BOND_REPO_LIBR"
+
+Option Explicit     'Requires that all variables to be declared explicitly.
+Option Base 1       'The "Option Base" statement allows to specify 0 or 1 as the
+                    'default first index of arrays.
+
+'************************************************************************************
+'************************************************************************************
+'FUNCTION      : BOND_IMPLIED_REPO_FUNC
+'DESCRIPTION   : IMPLIED REPO MODEL
+'LIBRARY       : BOND
+'GROUP         : REPO
+'ID            : 001
+'AUTHOR        : RAFAEL NICOLAS FERMIN COTA
+'LAST UPDATE   : 10-06-2008
+'************************************************************************************
+'************************************************************************************
+
+Function BOND_IMPLIED_REPO_FUNC(ByVal SETTLEMENT_DATE As Date, _
+ByVal SALE_DATE As Date, _
+ByVal REINV_RATE As Double, _
+ByRef VALOR_RNG As Variant, _
+ByRef INITIAL_PRICE_RNG As Variant, _
+ByRef COUPON_RNG As Variant, _
+ByRef MATURITY_RNG As Variant, _
+ByRef CLOSING_PRICE_RNG As Variant, _
+Optional ByVal FREQUENCY As Integer = 2, _
+Optional ByVal REDEMPTION As Double = 100, _
+Optional ByVal COUNT_BASIS As Integer = 0, _
+Optional ByVal DELTA_YIELD As Double = 0.01, _
+Optional ByVal GUESS_YIELD As Double = 0.1)
+
+'VALOR_RNG = Bond Identification
+'CLOSING_PRICE_RNG = SETTLEMENT PRICE * CONVERSION FACTOR
+
+Dim i As Long
+Dim j As Long
+Dim k As Long
+
+Dim NROWS As Long
+Dim NCOLUMNS As Long
+
+Dim HEADINGS_STR As String
+
+Dim VALOR_VECTOR As Variant
+Dim INITIAL_VECTOR As Variant
+Dim COUPON_VECTOR As Variant
+Dim MATURITY_VECTOR As Variant
+Dim CLOSING_VECTOR As Variant
+Dim TEMP_MATRIX As Variant
+
+On Error GoTo ERROR_LABEL
+
+VALOR_VECTOR = VALOR_RNG
+If UBound(VALOR_VECTOR, 1) = 1 Then
+    VALOR_VECTOR = MATRIX_TRANSPOSE_FUNC(VALOR_VECTOR)
+End If
+
+INITIAL_VECTOR = INITIAL_PRICE_RNG
+If UBound(INITIAL_VECTOR, 1) = 1 Then
+    INITIAL_VECTOR = MATRIX_TRANSPOSE_FUNC(INITIAL_VECTOR)
+End If
+
+COUPON_VECTOR = COUPON_RNG
+If UBound(COUPON_VECTOR, 1) = 1 Then
+    COUPON_VECTOR = MATRIX_TRANSPOSE_FUNC(COUPON_VECTOR)
+End If
+
+MATURITY_VECTOR = MATURITY_RNG
+If UBound(MATURITY_VECTOR, 1) = 1 Then
+    MATURITY_VECTOR = MATRIX_TRANSPOSE_FUNC(MATURITY_VECTOR)
+End If
+
+CLOSING_VECTOR = CLOSING_PRICE_RNG
+If UBound(CLOSING_VECTOR, 1) = 1 Then
+    CLOSING_VECTOR = MATRIX_TRANSPOSE_FUNC(CLOSING_VECTOR)
+End If
+
+NROWS = UBound(INITIAL_VECTOR, 1)
+NCOLUMNS = 19
+ReDim TEMP_MATRIX(0 To NROWS, 1 To NCOLUMNS)
+HEADINGS_STR = "BOND NO,VALOR,COUPON,MATURITY_DATE,NEXT COUPON,PRICE SETTLEMENT,YTM,MDURATION,DV 01,ACCRUED INTEREST,CASH PRICE,ADJ. SALE PRICE,ACCRUED INTEREST,AMOUNT INVOICE,COUPON REINV,REINV INTEREST,REALIZED VALUE,DIFFERENCE,IMPLIED REPO,"
+i = 1
+For k = 1 To NCOLUMNS
+    j = InStr(i, HEADINGS_STR, ",")
+    TEMP_MATRIX(0, k) = Mid(HEADINGS_STR, i, j - i)
+    i = j + 1
+Next k
+For i = 1 To NROWS
+    TEMP_MATRIX(i, 1) = i
+    TEMP_MATRIX(i, 2) = VALOR_VECTOR(i, 1)
+    TEMP_MATRIX(i, 3) = COUPON_VECTOR(i, 1)
+    TEMP_MATRIX(i, 4) = MATURITY_VECTOR(i, 1)
+    TEMP_MATRIX(i, 5) = COUPNCD_FUNC(SETTLEMENT_DATE, TEMP_MATRIX(i, 4), FREQUENCY)
+    TEMP_MATRIX(i, 6) = INITIAL_VECTOR(i, 1)
+    TEMP_MATRIX(i, 7) = BOND_YIELD_FUNC(TEMP_MATRIX(i, 6), SETTLEMENT_DATE, TEMP_MATRIX(i, 4), TEMP_MATRIX(i, 3), FREQUENCY, REDEMPTION, COUNT_BASIS, GUESS_YIELD)
+    TEMP_MATRIX(i, 8) = BOND_CONVEXITY_DURATION_FUNC(SETTLEMENT_DATE, TEMP_MATRIX(i, 4), TEMP_MATRIX(i, 3), TEMP_MATRIX(i, 7), FREQUENCY, REDEMPTION, COUNT_BASIS)(2)
+    TEMP_MATRIX(i, 9) = (((DELTA_YIELD * TEMP_MATRIX(i, 8)) * TEMP_MATRIX(i, 6)) * DELTA_YIELD)
+    TEMP_MATRIX(i, 10) = ACCRINT_FUNC(SETTLEMENT_DATE, TEMP_MATRIX(i, 4), TEMP_MATRIX(i, 3), FREQUENCY, COUNT_BASIS)
+    TEMP_MATRIX(i, 11) = TEMP_MATRIX(i, 6) + TEMP_MATRIX(i, 10)
+    TEMP_MATRIX(i, 12) = CLOSING_VECTOR(i, 1)
+    TEMP_MATRIX(i, 13) = ACCRINT_FUNC(SALE_DATE, TEMP_MATRIX(i, 4), TEMP_MATRIX(i, 3), FREQUENCY, COUNT_BASIS)
+    TEMP_MATRIX(i, 14) = TEMP_MATRIX(i, 12) + TEMP_MATRIX(i, 13)
+    If TEMP_MATRIX(i, 5) < SALE_DATE Then
+        TEMP_MATRIX(i, 15) = TEMP_MATRIX(i, 3) / FREQUENCY * 100
+        TEMP_MATRIX(i, 16) = TEMP_MATRIX(i, 15) * (1 + REINV_RATE) * (YEARFRAC_FUNC(TEMP_MATRIX(i, 5), SALE_DATE, COUNT_BASIS))
+    Else
+        TEMP_MATRIX(i, 15) = 0
+        TEMP_MATRIX(i, 16) = 0
+    End If
+    TEMP_MATRIX(i, 17) = TEMP_MATRIX(i, 14) + TEMP_MATRIX(i, 15) + TEMP_MATRIX(i, 16)
+    TEMP_MATRIX(i, 18) = TEMP_MATRIX(i, 17) - TEMP_MATRIX(i, 11)
+    TEMP_MATRIX(i, 19) = TEMP_MATRIX(i, 18) / TEMP_MATRIX(i, 11) * (1 / (YEARFRAC_FUNC(SETTLEMENT_DATE, SALE_DATE, COUNT_BASIS)))
+Next i
+
+BOND_IMPLIED_REPO_FUNC = TEMP_MATRIX
+
+Exit Function
+ERROR_LABEL:
+BOND_IMPLIED_REPO_FUNC = Err.number
+End Function
